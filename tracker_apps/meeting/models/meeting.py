@@ -104,7 +104,7 @@ class Meeting(models.Model):
 
     @staticmethod
     def get(meeting_id: int, owner_id: int) -> "Meeting":
-        meeting = Meeting.objects.owned_by(owner_id).filter(meeting_id=meeting_id).first()
+        meeting = Meeting.objects.owned_by(owner_id).select_related("analysis").filter(meeting_id=meeting_id).first()
         if meeting is None:
             raise NotFoundErrors()
         return meeting

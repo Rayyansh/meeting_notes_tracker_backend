@@ -24,3 +24,12 @@ class PayloadTooLargeErrors(HttpErrors):
 
 class UnsupportedMediaErrors(HttpErrors):
     pass
+
+
+class UpstreamErrors(HttpErrors):
+    """A dependency (e.g. the AI provider) failed. Carries its own status, generic message and error codes."""
+
+    def __init__(self, http_status: int, message: str, errors: list) -> None:
+        super().__init__(errors)
+        self.http_status = http_status
+        self.message = message

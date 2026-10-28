@@ -18,6 +18,7 @@ from tracker_apps.common.exceptions.http_errors import (
     NotFoundErrors,
     PayloadTooLargeErrors,
     UnsupportedMediaErrors,
+    UpstreamErrors,
 )
 from tracker_apps.common.exceptions.token_errors import TokenErrors
 from tracker_apps.common.exceptions.validation_errors import ValidationErrors
@@ -48,6 +49,8 @@ def known_error_response(exc: Exception) -> Response | None:
     if isinstance(exc, (TokenErrors, drf_exceptions.NotAuthenticated, drf_exceptions.AuthenticationFailed, TokenError)):
         errors = exc.errors if isinstance(exc, TokenErrors) else [Constants.unauthorized]
         return error_response(status.HTTP_401_UNAUTHORIZED, Constants.auth_error, errors)
+    if isinstance(exc, UpstreamErrors):
+        return error_response(exc.http_status, exc.message, exc.errors)
     for exc_type, http_status, message in HTTP_ERROR_MAP:
         if isinstance(exc, exc_type):
             return error_response(http_status, message, exc.errors or [message])

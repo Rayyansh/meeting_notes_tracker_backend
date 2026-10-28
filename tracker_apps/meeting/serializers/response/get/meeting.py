@@ -1,6 +1,8 @@
 from rest_framework import serializers
 
+from tracker_apps.action_item.serializers.response.get.action_item import ActionItemSerializer
 from tracker_apps.common.serializers.response.api_response import ApiResponseSerializer
+from tracker_apps.meeting.serializers.response.get.analysis import AnalysisSerializer
 
 
 class MeetingListItemSerializer(serializers.Serializer):
@@ -22,6 +24,8 @@ class MeetingDetailSerializer(MeetingListItemSerializer):
     analysisErrorCode = serializers.CharField(allow_null=True, required=False)
     analyzedAt = serializers.DateTimeField(allow_null=True, required=False)
     transcriptChangedSinceAnalysis = serializers.BooleanField(required=False)
+    analysis = AnalysisSerializer(allow_null=True, required=False)
+    actionItems = ActionItemSerializer(many=True, required=False)
 
 
 class MeetingResponseSerializer(ApiResponseSerializer):

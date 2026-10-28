@@ -1,0 +1,165 @@
+Sample Meeting Transcript
+Project Discovery and MVP Planning Meeting
+Meeting Type: Client Requirement Discussion
+Date: 28 July 2026
+Participants:
+•
+•
+•
+•
+•
+Maria — Client Founder
+James — Client Operations Manager
+Neha — Zignuts Business Analyst
+Arjun — Zignuts Technical Lead
+Riya — Zignuts UI/UX Designer
+Neha: Thanks, everyone. The purpose of today’s meeting is to understand the first version of the
+customer support automation platform and agree on what should be included in the MVP. Maria, could
+you start by explaining the current problem?
+Maria: Sure. We receive customer enquiries through email, website chat, and WhatsApp. The support
+team manually reads every message, identifies the issue, and assigns it to the right person. We receive
+around 800 enquiries per day, and during busy periods it can cross 1,200.
+James: The biggest problem is response time. Some messages are answered within fifteen minutes, but
+others remain unanswered for six or seven hours. Customers also send follow-up messages, which
+creates duplicate tickets.
+Neha: What would you like the new platform to automate?
+Maria: Ideally, everything. It should receive messages from every channel, understand the customer’s
+problem, reply automatically, assign tickets, track performance, detect unhappy customers, translate
+messages, recommend refunds, and give managers complete analytics.
+Arjun: That is a broad scope. For the first release, we should separate essential automation from later
+enhancements. Which channels contribute the highest volume today?
+James: Email is approximately 55%, website chat is 30%, and WhatsApp is the remaining 15%.
+Arjun: Do you already use a ticketing system?
+James: We use Zendesk, but only some teams use it correctly. A lot of communication still happens
+directly through shared email inboxes.
+Maria: I would prefer replacing Zendesk completely because the licence cost is high.
+Neha: Replacing the complete ticketing system may significantly increase the MVP scope. Would an
+initial integration with Zendesk be acceptable while we validate the AI automation?
+1
+Maria: Possibly, but I do not want us to become dependent on it permanently.
+Arjun: We can design the integration through an adapter so that Zendesk can be replaced later. For the
+MVP, that would reduce risk and avoid rebuilding ticket management, user roles, escalation workflows,
+and reporting from scratch.
+James: That sounds reasonable. My team mainly needs faster classification, suggested replies, and
+better assignment.
+Neha: Should the AI send replies automatically?
+James: For simple questions, yes. For example, order status, return policy, opening hours, or password
+reset instructions.
+Maria: I want all messages answered automatically. The purpose of AI is to reduce the support team.
+Arjun: Full automation may create business and reputational risk. The model may misunderstand
+complaints, payment issues, or legally sensitive requests. We recommend confidence-based
+automation. High-confidence and low-risk responses can be sent automatically. Other responses should
+be drafted for human approval.
+Maria: How will the system decide whether something is low risk?
+Arjun: We can initially define categories. Frequently asked questions and informational requests can be
+low risk. Refunds, cancellations, payment disputes, legal complaints, threats, and requests involving
+personal data should require human review.
+James: I agree. Refunds above €50 must already be approved by a supervisor.
+Neha: That sounds like an important business rule. Does the platform need to recommend a refund, or
+process it?
+James: For the MVP, it should only recommend the next action. It should not directly process payments
+or refunds.
+Maria: Fine, but I want managers to know when customers are angry.
+Riya: Would a sentiment indicator on each ticket be useful, such as positive, neutral, frustrated, or
+urgent?
+James: Yes, although the team should still be able to correct it because sarcasm is often misunderstood.
+Arjun: Good point. We should treat sentiment as a suggestion, not an absolute result.
+Neha: What information should agents see when opening a ticket?
+James: Customer name, channel, original message, category, priority, sentiment, previous messages,
+suggested response, and assigned agent.
+2
+Riya: Should agents edit the AI-generated response before sending it?
+James: Yes. They should also be able to reject the suggestion and write their own response.
+Maria: Can the system learn from those corrections?
+Arjun: Eventually, yes. For the MVP, we can store accepted, edited, and rejected suggestions. That gives
+us useful feedback data. Building an automated learning pipeline should probably be a later phase.
+Maria: Okay.
+Neha: Let us discuss assignment. How are tickets currently assigned?
+James: Mostly manually. Billing issues go to finance support, technical issues go to the technical
+support team, and account questions go to customer service. Within each team, managers assign
+tickets based on availability.
+Arjun: For the MVP, we could route tickets to a team based on category and leave individual assignment
+manual. Automatic workload balancing could be added later.
+James: That would already help.
+Maria: I still want individual automatic assignment.
+James: I am not sure our agent availability data is accurate enough for that.
+Neha: Then perhaps the MVP can recommend an agent but require a manager or team member to
+confirm the assignment.
+Maria: All right, as long as we can measure how often the recommendation is accepted.
+Riya: Do managers need a separate dashboard?
+James: Yes. At minimum, they need total ticket volume, average first-response time, open tickets,
+overdue tickets, category distribution, and the percentage of AI suggestions accepted.
+Maria: I also want cost savings and customer satisfaction.
+Neha: Customer satisfaction requires a feedback mechanism or existing source of CSAT data. Do you
+currently collect it?
+James: Zendesk sends a rating request after a ticket is closed, but response rates are low.
+Neha: We can include existing CSAT data if available, but calculating accurate cost savings will require
+baseline staffing and handling-time information.
+Maria: Let us not delay the MVP for that. We can add detailed cost analytics later.
+Arjun: Are there compliance or hosting requirements?
+3
+Maria: Most of our customers are in Germany and the Netherlands. Customer messages may contain
+names, email addresses, order details, and sometimes addresses.
+Arjun: Then GDPR and data handling are important. We need to know whether the selected AI provider
+stores prompts or uses them for training. We should also avoid sending unnecessary personal data to
+the model.
+James: We need ticket history for at least two years.
+Arjun: Storing ticket history and retaining AI processing logs are different decisions. We can retain
+business records while minimizing or anonymizing model request logs.
+Neha: Who will confirm the final data retention policy?
+Maria: I will check with our legal consultant by Friday.
+Riya: Regarding language support, which languages are required at launch?
+James: English and German cover almost all enquiries.
+Maria: We also receive Dutch messages.
+James: Dutch volume is less than 5%.
+Neha: Would English and German be acceptable for the MVP, with Dutch planned for the next release?
+Maria: Yes, provided the architecture can support additional languages later.
+Arjun: That is manageable.
+Neha: What timeline are you expecting?
+Maria: I want the MVP live in six weeks.
+Arjun: Six weeks is tight if it includes three communication channels, Zendesk integration, AI
+classification, response generation, sentiment analysis, multilingual support, assignment
+recommendations, dashboards, and compliance work.
+Maria: What can realistically be delivered?
+Arjun: I suggest that the six-week MVP include email and website chat, Zendesk integration,
+classification, priority detection, English and German response suggestions, confidence-based
+automatic replies for approved FAQs, team-level routing, basic sentiment analysis, and a manager
+dashboard.
+James: What about WhatsApp?
+Arjun: We can prepare the integration design but implement it in the next phase. WhatsApp
+onboarding and template approval can introduce dependencies outside the development team.
+4
+Maria: I would prefer WhatsApp, but I understand the risk. Let us keep it out of the first release as long
+as it is the first item in phase two.
+Neha: Agreed. Who will provide the existing FAQ content and support response templates?
+James: I can provide the FAQ documents and twenty examples of good responses by Wednesday.
+Neha: We will need more than twenty examples for evaluation, especially for different categories.
+James: I can ask each team lead to provide ten resolved tickets. That should give us around eighty
+examples.
+Arjun: Please remove or mask sensitive customer data before sharing them.
+James: Understood.
+Riya: I will need access to the current Zendesk workflow and screenshots of the views used by agents
+and managers.
+James: I will arrange a walkthrough on Thursday afternoon.
+Maria: When can we see the first design?
+Riya: If we receive the workflow information on Thursday, I can share initial wireframes by next
+Tuesday.
+Neha: Before we close, let me summarize the current direction. The MVP will not replace Zendesk. It will
+integrate with it through a replaceable adapter. The first release will support email and website chat,
+English and German, AI classification, priority, sentiment, suggested replies, limited automatic
+responses, team routing, agent recommendations, and a basic manager dashboard. WhatsApp, Dutch
+language support, automated learning, detailed cost analytics, and full replacement of Zendesk will be
+considered later.
+Maria: That matches my understanding.
+James: Yes, but please ensure that refund-related messages are never answered automatically.
+Arjun: Agreed. Refunds, payment disputes, legal complaints, data requests, and other sensitive
+categories will require human review.
+Neha: Maria will confirm the data retention policy with legal by Friday. James will provide FAQ
+documents and anonymized ticket examples by Wednesday and arrange the Zendesk walkthrough on
+Thursday. Riya will share initial wireframes by next Tuesday. Our technical team will prepare the
+architecture and integration proposal after reviewing the Zendesk workflow.
+Maria: Good. I would also like a revised estimate once the architecture is ready.
+Arjun: We can provide that by the end of next week.
+5
+Neha: Perfect. We will circulate the meeting summary and action items today. Thanks, everyone.
+6
