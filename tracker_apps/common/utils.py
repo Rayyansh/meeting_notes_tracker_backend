@@ -20,6 +20,11 @@ class Utils:
         return {"status": False, "message": message, "error": error}
 
     @staticmethod
+    def map_columns(row: dict, mapping: dict[str, str]) -> dict:
+        """Rename db columns to the camelCase response keys; unmapped columns are not exposed."""
+        return {response_key: row[column] for column, response_key in mapping.items() if column in row}
+
+    @staticmethod
     def flatten_errors(errors: object, prefix: str = "") -> list[dict]:
         """Turn DRF's nested serializer errors into [{"field", "message"}]."""
         if isinstance(errors, dict):

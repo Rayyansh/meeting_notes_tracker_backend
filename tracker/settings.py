@@ -6,6 +6,8 @@ from tracker.constants import Constants
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+AUTH_USER_MODEL = "authentication.User"
+
 SECRET_KEY = Configurations.secret_key
 DEBUG = Configurations.debug
 ALLOWED_HOSTS = Configurations.allowed_hosts
@@ -17,6 +19,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_spectacular",
     "tracker_apps.common",
@@ -87,7 +90,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "tracker_apps.authentication.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -103,6 +106,9 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=Configurations.access_token_minutes),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=Configurations.refresh_token_days),
     "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "USER_ID_FIELD": "user_id",
+    "USER_ID_CLAIM": "user_id",
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 

@@ -1,7 +1,41 @@
+import json
+import logging
+from datetime import date
+
 from django.conf import settings
-from django.db import connection
-from django.test import SimpleTestCase, TestCase
+from django.contrib.auth import get_user_model
+from django.core.exceptions import RequestDataTooBig
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError, connection
+from django.http import Http404
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.urls import path
+from rest_framework import exceptions as drf_exceptions
+from rest_framework import serializers
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.test import APIClient, APIRequestFactory
+
+from tracker.constants import Constants
+from tracker_apps.common.clock import Clock
+from tracker_apps.common.common import Common
+from tracker_apps.common.exceptions.http_errors import (
+    ConflictErrors,
+    ForbiddenErrors,
+    NotFoundErrors,
+    PayloadTooLargeErrors,
+    UnsupportedMediaErrors,
+)
+from tracker_apps.common.exceptions.token_errors import TokenErrors
+from tracker_apps.common.exceptions.validation_errors import ValidationErrors
+from tracker_apps.common.serializer_validations import SerializerValidations
+from tracker_apps.common.serializers.request.get_all import GetAllSerializer
+from tracker_apps.common.serializers.response.api_response import ApiResponseSerializer
+from tracker_apps.common.tests_utils import ApiTestCase
+from tracker_apps.common.utils import Utils
 
 
 class BootstrapSettingsTests(SimpleTestCase):
@@ -34,44 +68,6 @@ class BootstrapDatabaseTests(TestCase):
 class BootstrapUrlTests(TestCase):
     def test_schema_requires_auth_when_debug_is_off(self) -> None:
         self.assertEqual(APIClient().get("/api/schema/").status_code, 401)
-
-
-# ---- T1 common layer -------------------------------------------------------
-import json
-import logging
-from datetime import date
-
-from django.contrib.auth import get_user_model
-from django.core.exceptions import RequestDataTooBig
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError
-from django.http import Http404
-from django.test import override_settings
-from django.urls import path
-from rest_framework import exceptions as drf_exceptions
-from rest_framework import serializers
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import AllowAny
-from rest_framework.request import Request
-from rest_framework.response import Response
-
-from tracker.constants import Constants
-from tracker_apps.common.clock import Clock
-from tracker_apps.common.common import Common
-from tracker_apps.common.exceptions.http_errors import (
-    ConflictErrors,
-    ForbiddenErrors,
-    NotFoundErrors,
-    PayloadTooLargeErrors,
-    UnsupportedMediaErrors,
-)
-from tracker_apps.common.exceptions.token_errors import TokenErrors
-from tracker_apps.common.exceptions.validation_errors import ValidationErrors
-from tracker_apps.common.serializer_validations import SerializerValidations
-from tracker_apps.common.serializers.request.get_all import GetAllSerializer
-from tracker_apps.common.serializers.response.api_response import ApiResponseSerializer
-from tracker_apps.common.utils import Utils
 
 
 class SampleGetAllSerializer(GetAllSerializer):
@@ -177,19 +173,11 @@ urlpatterns = [
 
 
 @override_settings(ROOT_URLCONF="tracker_apps.common.tests")
-class CommonApiTestCase(TestCase):
+class CommonApiTestCase(ApiTestCase):
     def setUp(self) -> None:
-        self.user = get_user_model().objects.create_user(username="u", password="x")
-        self.client = APIClient()
-        self.client.force_authenticate(self.user)
-
-    def assert_error_envelope(self, response, http_status: int) -> dict:
-        self.assertEqual(response.status_code, http_status)
-        body = response.json()
-        self.assertIs(body["status"], False)
-        self.assertIsInstance(body["message"], str)
-        self.assertIsInstance(body["error"], list)
-        return body
+        super().setUp()
+        self.user = self.create_user()
+        self.authenticate(self.user)
 
 
 class UtilsEnvelopeTests(SimpleTestCase):
@@ -228,9 +216,9 @@ class PaginationTests(TestCase):
     def test_paginate_slices_and_counts(self) -> None:
         User = get_user_model()
         for index in range(5):
-            User.objects.create_user(username=f"p{index}", password="x")
-        rows, total_page = Utils.paginate(User.objects.order_by("username"), page_num=2, limit=2)
-        self.assertEqual([row.username for row in rows], ["p2", "p3"])
+            User.objects.create_user(email=f"p{index}@example.com", name="P", password="x")
+        rows, total_page = Utils.paginate(User.objects.order_by("email"), page_num=2, limit=2)
+        self.assertEqual([row.email for row in rows], ["p2@example.com", "p3@example.com"])
         self.assertEqual(total_page, 3)
 
     def test_empty_queryset_is_one_empty_page_not_an_error(self) -> None:
