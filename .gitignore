@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.DS_Store
+staticfiles/
+Task1-Project Discovery Meeting Transcript (1) (1).pdf
+Task1-Zignuts AI-Native Campus Hiring Challenge (1) (1).pdf
+CLAUDE.md
+MASTER_PROMPT.md
