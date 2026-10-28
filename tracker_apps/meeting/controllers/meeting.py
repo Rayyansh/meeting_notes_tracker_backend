@@ -22,7 +22,7 @@ TAG = ["meeting"]
 
 class MeetingViewController:
     @staticmethod
-    @extend_schema(request=MeetingCreateSerializer, responses={201: MeetingResponseSerializer}, tags=TAG)
+    @extend_schema(request={"application/json": MeetingCreateSerializer, "multipart/form-data": MeetingCreateSerializer}, responses={201: MeetingResponseSerializer}, tags=TAG)
     @api_view(["POST"])
     @permission_classes([IsAuthenticated])
     @SerializerValidations(serializer=MeetingCreateSerializer).validate
@@ -30,7 +30,7 @@ class MeetingViewController:
         return MeetingView().create_extract(params=request.params)
 
     @staticmethod
-    @extend_schema(request=MeetingUpdateSerializer, responses={200: MeetingResponseSerializer}, tags=TAG)
+    @extend_schema(request={"application/json": MeetingUpdateSerializer, "multipart/form-data": MeetingUpdateSerializer}, responses={200: MeetingResponseSerializer}, tags=TAG)
     @api_view(["PUT"])
     @permission_classes([IsAuthenticated])
     @SerializerValidations(serializer=MeetingUpdateSerializer).validate

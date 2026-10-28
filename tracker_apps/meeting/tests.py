@@ -1,10 +1,16 @@
 from datetime import date
+from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from tracker.config import Configurations
 from tracker.constants import Constants
+from tracker_apps.common.exceptions.http_errors import PayloadTooLargeErrors
 from tracker_apps.common.sanitizer import HtmlSanitizer
 from tracker_apps.common.tests_utils import ApiTestCase
 from tracker_apps.meeting.choices import AnalysisStatus, MeetingType
 from tracker_apps.meeting.models.meeting import Meeting
+from tracker_apps.meeting.transcript import TranscriptValidator
 
 CREATE_URL = "/meeting/create/"
 UPDATE_URL = "/meeting/update/"
@@ -428,3 +434,272 @@ class MeetingTranscriptChangeTests(MeetingApiTestCase):
     def test_non_transcript_edits_while_processing_are_allowed(self) -> None:
         meeting = self.analysed(AnalysisStatus.PROCESSING)
         self.assert_success_envelope(self.put(meeting, title="Renamed"))
+
+
+def txt(content: bytes | str = TRANSCRIPT, name: str = "standup.txt", content_type: str = "text/plain") -> SimpleUploadedFile:
+    data = content.encode() if isinstance(content, str) else content
+    return SimpleUploadedFile(name, data, content_type=content_type)
+
+
+class UploadHelpers(MeetingApiTestCase):
+    def post_file(self, upload: SimpleUploadedFile | None, **overrides: object):
+        body = self.payload(**overrides)
+        del body["transcript"]
+        if upload is not None:
+            body["transcript_file"] = upload
+        return self.client.post(CREATE_URL, body, format="multipart")
+
+    def put_multipart(self, meeting: Meeting, **body: object):
+        return self.client.put(UPDATE_URL, {"meeting_id": meeting.meeting_id, **body}, format="multipart")
+
+
+class TranscriptUploadTests(UploadHelpers):
+    def test_create_from_txt_upload_stores_text_source_and_display_name(self) -> None:
+        data = self.assert_success_envelope(self.post_file(txt()), 201)["data"]
+        self.assertEqual(data["transcript"], TRANSCRIPT)
+        self.assertEqual(data["transcriptSource"], "file")
+        self.assertEqual(data["transcriptFilename"], "standup.txt")
+
+    def test_multipart_fields_lists_and_dates_work_with_the_upload(self) -> None:
+        data = self.assert_success_envelope(self.post_file(txt(), participants=["Ana", "Bo", "ana"]), 201)["data"]
+        self.assertEqual(data["participants"], ["Ana", "Bo"])
+        self.assertEqual(data["meetingDate"], "2026-07-28")
+        self.assertEqual(data["meetingType"], "Project Meeting")
+
+    def test_multipart_validation_errors_are_field_keyed(self) -> None:
+        body = self.assert_error_envelope(self.post_file(txt(), title="", meeting_date="nope"), 400)
+        self.assertEqual({error["field"] for error in body["error"]}, {"title", "meeting_date"})
+        self.assertEqual(Meeting.objects.count(), 0)
+
+    def test_utf8_bom_is_tolerated_and_crlf_normalised(self) -> None:
+        upload = txt(b"\xef\xbb\xbfMaria: caf\xc3\xa9 plan\r\nJames: ok\r\n")
+        data = self.assert_success_envelope(self.post_file(upload), 201)["data"]
+        self.assertEqual(data["transcript"], "Maria: caf\u00e9 plan\nJames: ok")
+
+    def test_extension_check_is_case_insensitive(self) -> None:
+        self.assert_success_envelope(self.post_file(txt(name="NOTES.TXT")), 201)
+
+    def test_client_content_type_is_not_trusted_either_way(self) -> None:
+        self.assert_success_envelope(self.post_file(txt(content_type="application/octet-stream")), 201)
+        self.assert_error_envelope(self.post_file(txt(b"\x89PNG\r\n\x1a\n\x00\x00", content_type="text/plain")), 415)
+
+    def test_non_txt_files_are_rejected_with_415(self) -> None:
+        for name in ("plan.pdf", "plan.docx", "plan.md", "plan", "plan.txt.exe", "plan.txt "):
+            with self.subTest(name=name):
+                self.assert_error_envelope(self.post_file(txt(name=name)), 415)
+        self.assertEqual(Meeting.objects.count(), 0)
+
+    def test_binary_or_non_utf8_files_renamed_txt_are_rejected(self) -> None:
+        samples = {
+            "nul bytes": b"abc\x00def",
+            "png": b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+            "invalid utf8": b"\xff\xfe\xfa caf\xe9",
+            "utf16": "hello".encode("utf-16"),
+        }
+        for label, content in samples.items():
+            with self.subTest(label=label):
+                body = self.assert_error_envelope(self.post_file(txt(content)), 415)
+                self.assertEqual(body["error"], [Constants.transcript_file_not_text])
+        self.assertEqual(Meeting.objects.count(), 0)
+
+    def test_oversized_file_is_413_and_exact_limit_is_accepted(self) -> None:
+        with patch.object(Configurations, "upload_max_bytes", 100):
+            self.assert_error_envelope(self.post_file(txt("a" * 101)), 413)
+            self.assert_success_envelope(self.post_file(txt("a" * 100)), 201)
+        self.assertEqual(Meeting.objects.count(), 1)
+
+    def test_oversize_is_decided_from_size_before_reading_the_content(self) -> None:
+        class Unreadable:
+            name, size = "big.txt", Configurations.upload_max_bytes + 1
+
+            def read(self, *args: object) -> bytes:
+                raise AssertionError("content must not be read when size is already over the limit")
+
+        with self.assertRaises(PayloadTooLargeErrors):
+            TranscriptValidator.from_upload(Unreadable())
+
+    def test_read_is_bounded_even_if_reported_size_lies(self) -> None:
+        class Liar:
+            name, size = "liar.txt", 1
+
+            def __init__(self) -> None:
+                self.requested = 0
+
+            def read(self, count: int) -> bytes:
+                self.requested = count
+                return b"a" * count
+
+        liar = Liar()
+        with patch.object(Configurations, "upload_max_bytes", 50), self.assertRaises(PayloadTooLargeErrors):
+            TranscriptValidator.from_upload(liar)
+        self.assertEqual(liar.requested, 51)
+
+    def test_empty_and_whitespace_only_files_are_400_on_the_file_field(self) -> None:
+        for content in (b"", b"  \n\t \r\n", b"\xef\xbb\xbf"):
+            with self.subTest(content=content):
+                body = self.assert_error_envelope(self.post_file(txt(content)), 400)
+                self.assertEqual(body["error"], [{"field": "transcript_file", "message": Constants.transcript_file_empty}])
+
+    def test_text_and_file_together_are_rejected(self) -> None:
+        body = self.payload()
+        body["transcript_file"] = txt()
+        body = self.assert_error_envelope(self.client.post(CREATE_URL, body, format="multipart"), 400)
+        self.assertEqual(body["error"], [{"field": "transcript", "message": Constants.transcript_both}])
+
+    def test_no_transcript_source_on_create_is_rejected(self) -> None:
+        body = self.assert_error_envelope(self.post_file(None), 400)
+        self.assertEqual(body["error"], [{"field": "transcript", "message": Constants.transcript_required}])
+
+    def test_multipart_text_transcript_works_without_a_file(self) -> None:
+        body = self.payload()
+        data = self.assert_success_envelope(self.client.post(CREATE_URL, body, format="multipart"), 201)["data"]
+        self.assertEqual((data["transcriptSource"], data["transcriptFilename"]), ("text", None))
+
+    def test_file_sent_as_json_string_is_rejected(self) -> None:
+        body = self.payload()
+        del body["transcript"]
+        self.assert_error_envelope(self.client.post(CREATE_URL, {**body, "transcript_file": "not a file"}, format="json"), 400)
+
+    def test_text_with_nul_bytes_is_rejected(self) -> None:
+        self.assert_error_envelope(self.client.post(CREATE_URL, self.payload(transcript="a\x00b"), format="json"), 400)
+
+    def test_pasted_text_newlines_are_normalised(self) -> None:
+        self.assertEqual(self.create(transcript="A: hi\r\nB: yo")["transcript"], "A: hi\nB: yo")
+
+    def test_display_name_is_sanitised_and_never_a_path(self) -> None:
+        names = {
+            "../../etc/passwd.txt": "passwd.txt",
+            "C:\\Users\\me\\notes.txt": "notes.txt",
+            "a/b/c.txt": "c.txt",
+            "evil<script>.txt": "evil_script_.txt",
+            "line\nbreak\x07.txt": "line_break_.txt",
+            ".txt": "transcript.txt",
+            "r\u00e9union \u2013 q3.txt": "r\u00e9union _ q3.txt",
+        }
+        for client_name, expected in names.items():
+            with self.subTest(client_name=client_name):
+                self.assertEqual(TranscriptValidator.display_name(client_name), expected)
+
+    def test_very_long_file_name_is_truncated_to_column_size(self) -> None:
+        name = TranscriptValidator.display_name("x" * 400 + ".txt")
+        self.assertEqual(len(name), Constants.transcript_file_name_max_length)
+        self.assertTrue(name.endswith(".txt"))
+        data = self.assert_success_envelope(self.post_file(txt(name="y" * 400 + ".txt")), 201)["data"]
+        self.assertLessEqual(len(data["transcriptFilename"]), Constants.transcript_file_name_max_length)
+
+    def test_error_responses_do_not_echo_file_content_or_internals(self) -> None:
+        secret = b"TOP-SECRET-PAYLOAD\x00"
+        text = self.post_file(txt(secret)).content.decode()
+        for leaked in ("TOP-SECRET-PAYLOAD", "Traceback", "UnicodeDecodeError", "codec"):
+            self.assertNotIn(leaked, text)
+
+    def test_upload_requires_authentication_and_ownership(self) -> None:
+        self.client.force_authenticate(None)
+        self.assert_error_envelope(self.post_file(txt()), 401)
+        theirs = self.make_meeting(owner=self.other)
+        self.authenticate(self.user)
+        self.assert_error_envelope(self.put_multipart(theirs, transcript_file=txt("hijack")), 404)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.transcript, TRANSCRIPT)
+
+
+class TranscriptUpdateInputTests(UploadHelpers):
+    def test_update_with_file_replaces_transcript_and_sets_file_source(self) -> None:
+        meeting = self.make_meeting()
+        data = self.assert_success_envelope(self.put_multipart(meeting, transcript_file=txt("Neha: new content", name="v2.txt")))["data"]
+        self.assertEqual((data["transcript"], data["transcriptSource"], data["transcriptFilename"]), ("Neha: new content", "file", "v2.txt"))
+
+    def test_update_back_to_pasted_text_clears_filename(self) -> None:
+        meeting = self.make_meeting(transcript_source="file", transcript_filename="old.txt")
+        data = self.assert_success_envelope(self.client.put(UPDATE_URL, {"meeting_id": meeting.meeting_id, "transcript": "typed"}, format="json"))["data"]
+        self.assertEqual((data["transcriptSource"], data["transcriptFilename"]), ("text", None))
+
+    def test_update_without_transcript_keeps_source_and_filename(self) -> None:
+        meeting = self.make_meeting(transcript_source="file", transcript_filename="old.txt")
+        self.client.put(UPDATE_URL, {"meeting_id": meeting.meeting_id, "title": "Renamed"}, format="json")
+        meeting.refresh_from_db()
+        self.assertEqual((meeting.transcript_source, meeting.transcript_filename), ("file", "old.txt"))
+
+    def test_update_with_both_text_and_file_is_rejected(self) -> None:
+        meeting = self.make_meeting()
+        response = self.put_multipart(meeting, transcript="x", transcript_file=txt())
+        self.assert_error_envelope(response, 400)
+
+    def test_update_with_invalid_files_changes_nothing(self) -> None:
+        meeting = self.make_meeting()
+        self.assert_error_envelope(self.put_multipart(meeting, transcript_file=txt(name="a.pdf")), 415)
+        self.assert_error_envelope(self.put_multipart(meeting, transcript_file=txt(b"\x00\x01")), 415)
+        self.assert_error_envelope(self.put_multipart(meeting, transcript_file=txt(b"  ")), 400)
+        meeting.refresh_from_db()
+        self.assertEqual((meeting.transcript, meeting.transcript_source), (TRANSCRIPT, "text"))
+
+    def test_file_update_after_analysis_flags_stale_analysis(self) -> None:
+        meeting = self.make_meeting(analysis_status=AnalysisStatus.COMPLETED)
+        data = self.assert_success_envelope(self.put_multipart(meeting, transcript_file=txt("different")))["data"]
+        self.assertTrue(data["transcriptChangedSinceAnalysis"])
+        reset = self.assert_success_envelope(self.put_multipart(meeting, transcript_file=txt("again"), reset_analysis="true"))["data"]
+        self.assertEqual(reset["analysisStatus"], AnalysisStatus.NOT_STARTED)
+
+    def test_file_update_while_processing_is_409(self) -> None:
+        meeting = self.make_meeting(analysis_status=AnalysisStatus.PROCESSING)
+        self.assert_error_envelope(self.put_multipart(meeting, transcript_file=txt("different")), 409)
+
+    def test_reuploading_identical_content_does_not_flag_stale_analysis(self) -> None:
+        meeting = self.make_meeting(analysis_status=AnalysisStatus.COMPLETED)
+        data = self.assert_success_envelope(self.put_multipart(meeting, transcript_file=txt(TRANSCRIPT)))["data"]
+        self.assertFalse(data["transcriptChangedSinceAnalysis"])
+        self.assertEqual(data["transcriptSource"], "file")
+
+
+class MeetingTimestampTests(MeetingApiTestCase):
+    FAKE = "2001-01-01T00:00:00Z"
+
+    def test_client_supplied_timestamps_are_ignored_on_create(self) -> None:
+        data = self.create(created_at=self.FAKE, updated_at=self.FAKE)
+        self.assertNotEqual(data["createdAt"], self.FAKE)
+        self.assertNotEqual(data["updatedAt"], self.FAKE)
+        self.assertTrue(data["createdAt"].startswith("2026"))
+
+    def test_client_supplied_timestamps_are_ignored_on_update(self) -> None:
+        meeting = self.make_meeting()
+        created = meeting.created_at
+        response = self.client.put(UPDATE_URL, {"meeting_id": meeting.meeting_id, "title": "T", "created_at": self.FAKE, "updated_at": self.FAKE}, format="json")
+        self.assert_success_envelope(response)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.created_at, created)
+        self.assertGreater(meeting.updated_at, created)
+        self.assertEqual(meeting.updated_at.year, created.year)
+
+    def test_model_update_helper_refreshes_updated_at_and_keeps_created_at(self) -> None:
+        from tracker_apps.meeting.dataclasses.request.update.meeting import MeetingUpdate
+
+        meeting = self.make_meeting()
+        created, before = meeting.created_at, meeting.updated_at
+        updated = Meeting.update(MeetingUpdate(meeting_id=meeting.meeting_id, notes="<p>n</p>"), owner_id=self.user.pk)
+        self.assertEqual(updated.created_at, created)
+        self.assertGreater(updated.updated_at, before)
+
+    def test_model_update_helper_is_owner_scoped(self) -> None:
+        from tracker_apps.common.exceptions.http_errors import NotFoundErrors
+        from tracker_apps.meeting.dataclasses.request.update.meeting import MeetingUpdate
+
+        theirs = self.make_meeting(owner=self.other)
+        with self.assertRaises(NotFoundErrors):
+            Meeting.update(MeetingUpdate(meeting_id=theirs.meeting_id, title="x"), owner_id=self.user.pk)
+
+    def test_request_dataclasses_carry_optional_timestamps(self) -> None:
+        from tracker_apps.meeting.dataclasses.request.create.meeting import MeetingCreate
+        from tracker_apps.meeting.dataclasses.request.update.meeting import MeetingUpdate
+
+        created = MeetingCreate(title="t", meeting_date=date(2026, 1, 1), meeting_type="Other", transcript="x")
+        self.assertEqual((created.created_at, created.updated_at), (None, None))
+        self.assertEqual((MeetingUpdate(meeting_id=1).created_at, MeetingUpdate(meeting_id=1).updated_at), (None, None))
+
+    def test_timestamps_are_read_only_in_the_openapi_schema(self) -> None:
+        from drf_spectacular.generators import SchemaGenerator
+
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        for name in ("MeetingCreate", "MeetingUpdate"):
+            properties = schema["components"]["schemas"][name]["properties"]
+            self.assertTrue(properties["created_at"]["readOnly"])
+            self.assertTrue(properties["updated_at"]["readOnly"])

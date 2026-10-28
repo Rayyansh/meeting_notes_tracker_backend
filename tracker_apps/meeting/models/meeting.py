@@ -2,13 +2,24 @@ from django.conf import settings
 from django.db import models
 from django.db.models import Q, QuerySet
 
-from tracker_apps.common.exceptions.http_errors import NotFoundErrors
+from tracker.constants import Constants
+from tracker_apps.common.exceptions.http_errors import ConflictErrors, NotFoundErrors
 from tracker_apps.common.fields import UnicodeJSONEncoder
 from tracker_apps.meeting.choices import AnalysisStatus, MeetingType, TranscriptSource
 from tracker_apps.meeting.dataclasses.request.create.meeting import MeetingCreate
 from tracker_apps.meeting.dataclasses.request.get.meeting import MeetingGetAll
+from tracker_apps.meeting.dataclasses.request.update.meeting import MeetingUpdate
 
 UPDATABLE_FIELDS: tuple[str, ...] = ("title", "meeting_date", "meeting_type", "participants", "notes")
+TRANSCRIPT_FIELDS: list[str] = [
+    "transcript",
+    "transcript_source",
+    "transcript_filename",
+    "analysis_status",
+    "analysis_error_code",
+    "analyzed_at",
+    "transcript_changed_since_analysis",
+]
 
 
 class MeetingQuerySet(models.QuerySet):
@@ -56,8 +67,40 @@ class Meeting(models.Model):
             meeting_type=params.meeting_type,
             participants=params.participants,
             transcript=params.transcript,
+            transcript_source=params.transcript_source,
+            transcript_filename=params.transcript_filename,
             notes=params.notes,
         )
+
+    @staticmethod
+    def update(params: MeetingUpdate, owner_id: int) -> "Meeting":
+        """Apply the provided fields to an owned meeting; updated_at is refreshed on every save."""
+        meeting = Meeting.get(meeting_id=params.meeting_id, owner_id=owner_id)
+        changed = [name for name in UPDATABLE_FIELDS if getattr(params, name) is not None]
+        for name in changed:
+            setattr(meeting, name, getattr(params, name))
+        if params.transcript is not None:
+            if params.transcript != meeting.transcript:
+                meeting.apply_transcript_change(params)
+            meeting.transcript_source = params.transcript_source
+            meeting.transcript_filename = params.transcript_filename
+            changed += TRANSCRIPT_FIELDS
+        meeting.save(update_fields=list(dict.fromkeys(changed)) + ["updated_at"])
+        return meeting
+
+    def apply_transcript_change(self, params: MeetingUpdate) -> None:
+        if self.analysis_status == AnalysisStatus.PROCESSING:
+            raise ConflictErrors([Constants.meeting_analysis_running])
+        self.transcript = params.transcript
+        if self.analysis_status == AnalysisStatus.NOT_STARTED:
+            return
+        if params.reset_analysis:
+            self.analysis_status = AnalysisStatus.NOT_STARTED
+            self.analysis_error_code = None
+            self.analyzed_at = None
+            self.transcript_changed_since_analysis = False
+        else:
+            self.transcript_changed_since_analysis = True
 
     @staticmethod
     def get(meeting_id: int, owner_id: int) -> "Meeting":

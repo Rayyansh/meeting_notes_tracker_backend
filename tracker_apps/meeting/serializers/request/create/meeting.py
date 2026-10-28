@@ -2,20 +2,25 @@ from rest_framework import serializers
 
 from tracker_apps.meeting.dataclasses.request.create.meeting import MeetingCreate
 from tracker_apps.meeting.serializers.request import fields
+from tracker_apps.meeting.serializers.request.transcript import TranscriptInputSerializer
 
 
-class MeetingCreateSerializer(serializers.Serializer):
+class MeetingCreateSerializer(TranscriptInputSerializer):
     title = fields.title_field()
     meeting_date = fields.meeting_date_field()
     meeting_type = fields.meeting_type_field()
     participants = fields.participants_field()
-    transcript = fields.transcript_field()
     notes = fields.notes_field()
+    created_at = fields.timestamp_field()
+    updated_at = fields.timestamp_field()
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.fields["participants"].required = False
         self.fields["notes"].required = False
+
+    def validate(self, attrs: dict) -> dict:
+        return self.resolve_transcript(attrs)
 
     def validate_participants(self, value: list[str]) -> list[str]:
         return fields.clean_participants(value)

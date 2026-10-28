@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 
 
 @dataclass
@@ -14,3 +14,7 @@ class MeetingUpdate:
     transcript: str | None = field(default=None, repr=False)
     notes: str | None = None
     reset_analysis: bool = False
+    transcript_source: str = "text"
+    transcript_filename: str | None = None
+    created_at: datetime | None = None  # read-only: set by the database, never taken from a request
+    updated_at: datetime | None = None  # read-only: refreshed on every save

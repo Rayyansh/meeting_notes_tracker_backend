@@ -51,3 +51,12 @@ class Constants:
     meeting_update_success = "Meeting updated successfully"
     meeting_delete_success = "Meeting deleted successfully"
     meeting_analysis_running = "Analysis is running. Wait for it to finish before changing the transcript."
+    transcript_both = "Provide either pasted transcript text or a .txt file, not both."
+    transcript_nul = "The transcript contains unsupported characters."
+    transcript_file_empty = "The uploaded file is empty. Choose a .txt file that contains the transcript."
+    transcript_file_type = "Only .txt transcript files are supported."
+    transcript_file_not_text = "The file is not a valid UTF-8 text file."
+    transcript_file_too_large = "The file is too large. Upload a smaller .txt file."
+    transcript_file_default_name = "transcript.txt"
+    transcript_file_extension = ".txt"
+    transcript_file_name_max_length = 255

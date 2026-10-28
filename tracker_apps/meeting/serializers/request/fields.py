@@ -59,3 +59,8 @@ def clean_participants(names: list[str]) -> list[str]:
 
 def clean_notes(html: str) -> str:
     return HtmlSanitizer.clean(html)
+
+
+def timestamp_field() -> serializers.DateTimeField:
+    """created_at / updated_at: shown in the API schema, never accepted from a client."""
+    return serializers.DateTimeField(read_only=True)
