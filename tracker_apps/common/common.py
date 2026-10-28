@@ -112,5 +112,5 @@ class Common:
             return
         serializer = self.response_handler(data=response.data)
         if not serializer.is_valid():
-            raise RuntimeError(f"Response failed {self.response_handler.__name__} contract: {sorted(serializer.errors)}")
+            raise RuntimeError(f"Response failed {self.response_handler.__name__} contract: {dict(serializer.errors)}")
 
