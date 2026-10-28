@@ -1,4 +1,5 @@
 from tracker_apps.action_item.models.action_item import ActionItem
+from tracker_apps.action_item.overdue import Overdue
 from tracker_apps.common.utils import Utils
 
 ACTION_ITEM_COLUMNS: dict[str, str] = {
@@ -22,9 +23,16 @@ BLANK_AS_NULL: tuple[str, ...] = ("owner_name", "due_date_text", "evidence_quote
 
 class ActionItemUtils:
     @staticmethod
-    def response(item: ActionItem) -> dict:
-        """Missing values are stored blank/NULL and always returned as null, never as placeholders."""
-        row = {column: getattr(item, column) for column in ACTION_ITEM_COLUMNS}
+    def response(item: ActionItem, columns: list[str] | None = None) -> dict:
+        """Missing values are stored blank/NULL and always returned as null, never as placeholders.
+        `columns` limits the db columns returned (the `values` query parameter); derived fields are then omitted."""
+        wanted = {column: ACTION_ITEM_COLUMNS[column] for column in (columns or ACTION_ITEM_COLUMNS)}
+        row = {column: getattr(item, column) for column in wanted}
         for column in BLANK_AS_NULL:
-            row[column] = row[column] or None
-        return Utils.map_columns(row, ACTION_ITEM_COLUMNS)
+            if column in row:
+                row[column] = row[column] or None
+        data = Utils.map_columns(row, wanted)
+        if not columns:
+            data["meetingTitle"] = item.meeting.title
+            data["isOverdue"] = Overdue.is_overdue(item.due_date, item.status)
+        return data

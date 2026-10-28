@@ -60,7 +60,7 @@ class MeetingUtils:
 
     @staticmethod
     def action_items_payload(meeting: Meeting) -> list[dict]:
-        return [ActionItemUtils.response(item) for item in meeting.action_items.soonest_due_first()]
+        return [ActionItemUtils.response(item) for item in meeting.action_items.with_meeting().soonest_due_first()]
 
     @staticmethod
     def analysis_state_response(meeting: Meeting) -> dict:
