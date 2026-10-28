@@ -90,3 +90,6 @@ class Constants:
     action_item_update_success = "Action item updated successfully"
     action_item_delete_success = "Action item deleted successfully"
     action_nothing_to_update = "Provide at least one field to update."
+    dashboard_recent_limit = 5
+    dashboard_upcoming_limit = 5
+    dashboard_success = "Dashboard fetched successfully"
